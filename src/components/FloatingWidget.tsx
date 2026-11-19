@@ -17,10 +17,35 @@ interface DocumentPictureInPicture {
   window: Window | null;
 }
 
+interface WebKitHTMLVideoElement extends HTMLVideoElement {
+  webkitSupportsPresentationMode?: (mode: 'inline' | 'fullscreen' | 'picture-in-picture') => boolean;
+  webkitSetPresentationMode?: (mode: 'inline' | 'fullscreen' | 'picture-in-picture') => void;
+  webkitPresentationMode?: 'inline' | 'fullscreen' | 'picture-in-picture';
+}
+
 declare global {
   interface Window {
     documentPictureInPicture?: DocumentPictureInPicture;
   }
+}
+
+function fillRoundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number
+) {
+  const radius = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + w, y, x + w, y + h, radius);
+  ctx.arcTo(x + w, y + h, x, y + h, radius);
+  ctx.arcTo(x, y + h, x, y, radius);
+  ctx.arcTo(x, y, x + w, y, radius);
+  ctx.closePath();
+  ctx.fill();
 }
 
 interface FloatingWidgetControlProps {
@@ -46,14 +71,14 @@ export function FloatingWidgetControl({
   const [pipNotice, setPipNotice] = useState<string | null>(null);
 
   const pipWinRef = useRef<Window | null>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const videoRef = useRef<WebKitHTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
   const todayKey = toLocalDateKey();
   const completedCount = habits.filter((h) => h.completedDates.includes(todayKey)).length;
 
-  // Draw crisp live widget onto offscreen canvas for mobile video PiP
+  // Draw large, high-contrast 16:9 frame optimized for small smartphone PiP floating windows
   const drawCanvasFrame = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -63,60 +88,54 @@ export function FloatingWidgetControl({
     const w = canvas.width;
     const h = canvas.height;
 
-    // Deep slate background
+    // Deep forest-slate canvas
     ctx.fillStyle = '#0F1714';
     ctx.fillRect(0, 0, w, h);
 
-    // Subtle top accent bar
-    ctx.fillStyle = '#0D6E52';
-    ctx.fillRect(0, 0, w, 10);
+    // Top emerald accent strip
+    ctx.fillStyle = '#18A87C';
+    ctx.fillRect(0, 0, w, 12);
 
-    // Header label
-    ctx.fillStyle = '#94A39D';
-    ctx.font = '600 22px "Plus Jakarta Sans", sans-serif';
-    ctx.fillText(`RAMADAN ${hijriYear} H  ·  ${formatIndonesianDate(targetDateStr)}`, 36, 62);
+    // Header date line
+    ctx.fillStyle = '#A7F3D0';
+    ctx.font = '600 24px "Plus Jakarta Sans", system-ui, sans-serif';
+    ctx.fillText(`MENUJU RAMADAN ${hijriYear} H  ·  ${formatIndonesianDate(targetDateStr)}`, 36, 68);
 
-    // Main countdown
+    // Primary large countdown (high legibility when shrunk to corner PiP on phone)
     ctx.fillStyle = '#FFFFFF';
     if (countdown.isRamadan) {
-      ctx.font = '700 58px "Plus Jakarta Sans", sans-serif';
-      ctx.fillText(`Hari ke-${countdown.ramadanDay}`, 36, 154);
+      ctx.font = '700 72px "Plus Jakarta Sans", system-ui, sans-serif';
+      ctx.fillText(`Hari ke-${countdown.ramadanDay}`, 36, 178);
     } else {
-      ctx.font = '700 68px "JetBrains Mono", monospace';
+      ctx.font = '700 84px "JetBrains Mono", ui-monospace, monospace';
       const hrs = String(countdown.hours).padStart(2, '0');
       const mins = String(countdown.minutes).padStart(2, '0');
       const secs = String(countdown.seconds).padStart(2, '0');
-      ctx.fillText(`${countdown.days}h  ${hrs}:${mins}:${secs}`, 36, 160);
+      ctx.fillText(`${countdown.days}H  ${hrs}:${mins}:${secs}`, 36, 184);
     }
 
     // Habit progress footer
     const total = habits.length;
     const pct = total > 0 ? completedCount / total : 0;
 
-    ctx.fillStyle = '#CBD5D1';
-    ctx.font = '500 24px "Plus Jakarta Sans", sans-serif';
-    ctx.fillText(`Kebiasaan hari ini: ${completedCount} dari ${total} selesai`, 36, 250);
+    ctx.fillStyle = '#D1DBD7';
+    ctx.font = '600 26px "Plus Jakarta Sans", system-ui, sans-serif';
+    ctx.fillText(`Kebiasaan hari ini: ${completedCount} / ${total} selesai`, 36, 266);
 
     // Progress bar track
     const barX = 36;
-    const barY = 278;
+    const barY = 296;
     const barW = w - 72;
-    const barH = 14;
+    const barH = 18;
     ctx.fillStyle = '#24332E';
-    ctx.beginPath();
-    ctx.roundRect(barX, barY, barW, barH, 7);
-    ctx.fill();
+    fillRoundedRect(ctx, barX, barY, barW, barH, 9);
 
-    // Progress fill
     if (pct > 0) {
       ctx.fillStyle = '#18A87C';
-      ctx.beginPath();
-      ctx.roundRect(barX, barY, Math.max(14, Math.round(barW * pct)), barH, 7);
-      ctx.fill();
+      fillRoundedRect(ctx, barX, barY, Math.max(18, Math.round(barW * pct)), barH, 9);
     }
   }, [completedCount, countdown, habits.length, hijriYear, targetDateStr]);
 
-  // Sync Document PiP DOM if open
   const syncDocumentPip = useCallback(() => {
     const win = pipWinRef.current;
     if (!win || win.closed) return;
@@ -164,7 +183,7 @@ export function FloatingWidgetControl({
     }
   }, [completedCount, countdown, habits, onToggleHabit, todayKey]);
 
-  // Update active PiP windows on tick or habit change
+  // Redraw active PiP every second or when habits change
   useEffect(() => {
     if (!pipActive) return;
     if (pipWinRef.current && !pipWinRef.current.closed) {
@@ -188,9 +207,22 @@ export function FloatingWidgetControl({
       }
     }
 
+    const video = videoRef.current;
+    if (video?.webkitPresentationMode === 'picture-in-picture' && video.webkitSetPresentationMode) {
+      try {
+        video.webkitSetPresentationMode('inline');
+      } catch {
+        // Ignore
+      }
+    }
+
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
+    }
+
+    if (video) {
+      video.srcObject = null;
     }
 
     setPipActive(false);
@@ -215,7 +247,7 @@ export function FloatingWidgetControl({
       return;
     }
 
-    // 1. Try Document Picture-in-Picture (interactive window)
+    // 1. Try Document Picture-in-Picture (interactive window on supported browsers)
     if (window.documentPictureInPicture?.requestWindow) {
       try {
         const pipWin = await window.documentPictureInPicture.requestWindow({
@@ -296,11 +328,11 @@ export function FloatingWidgetControl({
         syncDocumentPip();
         return;
       } catch {
-        // Fall through to Video PiP or show message
+        // Fall through to Video PiP
       }
     }
 
-    // 2. Fallback: Canvas -> Video Picture-in-Picture (works on Android Chrome & iOS Safari)
+    // 2. Mobile & cross-browser Canvas -> Video Picture-in-Picture
     try {
       const canvas = canvasRef.current;
       const video = videoRef.current;
@@ -309,10 +341,24 @@ export function FloatingWidgetControl({
       }
 
       drawCanvasFrame();
-      const stream = canvas.captureStream(1);
+      const stream = canvas.captureStream(5);
       streamRef.current = stream;
       video.srcObject = stream;
+      video.muted = true;
+      video.playsInline = true;
+
       await video.play();
+
+      if (video.readyState < 1) {
+        await new Promise<void>((resolve) => {
+          const onReady = () => {
+            video.removeEventListener('loadedmetadata', onReady);
+            resolve();
+          };
+          video.addEventListener('loadedmetadata', onReady);
+          window.setTimeout(resolve, 400);
+        });
+      }
 
       if (typeof video.requestPictureInPicture === 'function') {
         await video.requestPictureInPicture();
@@ -320,16 +366,24 @@ export function FloatingWidgetControl({
           stopPip();
         };
         setPipActive(true);
+        setPipNotice(
+          'Floating Window aktif. Kamu bisa tekan tombol Home di HP dan jendela hitung mundur akan tetap mengambang.'
+        );
+      } else if (
+        typeof video.webkitSupportsPresentationMode === 'function' &&
+        video.webkitSupportsPresentationMode('picture-in-picture') &&
+        typeof video.webkitSetPresentationMode === 'function'
+      ) {
+        video.webkitSetPresentationMode('picture-in-picture');
+        setPipActive(true);
+        setPipNotice('Floating Window iOS aktif. Tekan Home untuk melihat widget tetap mengambang.');
       } else {
         throw new Error('Picture-in-Picture tidak tersedia.');
       }
     } catch {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-      }
+      await stopPip();
       setPipNotice(
-        'Mode jendela OS (PiP) dibatasi di pratinjau ini. Gunakan Widget Mengambang di Layar atau buka langsung di browser smartphone.'
+        'Mode PiP luar aplikasi tidak tersedia di browser/WebView ini. Gunakan Widget Dalam Layar di samping, atau buka link Vercel langsung lewat Chrome di HP.'
       );
     }
   };
@@ -345,7 +399,7 @@ export function FloatingWidgetControl({
             Floating Widget Smartphone
           </h2>
           <p className="mt-1 text-xs sm:text-sm text-slate-500">
-            Tempelkan pengingat hitung mundur yang bisa digeser di layar atau buka sebagai jendela mengambang.
+            Aktifkan pengingat mengambang di dalam layar atau pop-out Picture-in-Picture agar tetap tampil saat membuka aplikasi lain.
           </p>
         </div>
       </div>
@@ -369,7 +423,7 @@ export function FloatingWidgetControl({
           ) : (
             <>
               <Eye className="w-4 h-4 shrink-0" aria-hidden="true" />
-              <span className="whitespace-nowrap">Tampilkan Widget</span>
+              <span className="whitespace-nowrap">Widget Dalam Layar</span>
             </>
           )}
         </button>
@@ -386,20 +440,31 @@ export function FloatingWidgetControl({
         >
           <ExternalLink className="w-4 h-4 shrink-0" aria-hidden="true" />
           <span className="whitespace-nowrap">
-            {pipActive ? 'Tutup Floating OS' : 'Floating Window (PiP)'}
+            {pipActive ? 'Tutup Floating (PiP)' : 'Floating Luar App (PiP)'}
           </span>
         </button>
       </div>
 
-      {pipNotice && (
-        <p className="mt-3 text-xs text-slate-600 leading-relaxed" role="status">
-          {pipNotice}
-        </p>
-      )}
+      <p className="mt-3 text-xs text-slate-500 leading-relaxed" role="status">
+        {pipNotice ??
+          'Tip HP: Buka link Vercel di Chrome Android, ketuk Floating Luar App (PiP), lalu tekan tombol Home agar widget tetap melayang di layar.'}
+      </p>
 
-      {/* Hidden offscreen canvas & video used solely for mobile Canvas->Video Picture-in-Picture */}
-      <canvas ref={canvasRef} width={640} height={340} className="hidden" aria-hidden="true" />
-      <video ref={videoRef} muted playsInline className="hidden" aria-hidden="true" />
+      {/* Off-screen (NOT display:none) canvas & video so mobile Chrome/Safari actively decode PiP frames */}
+      <canvas
+        ref={canvasRef}
+        width={640}
+        height={360}
+        aria-hidden="true"
+        className="fixed -left-[9999px] top-0 w-16 h-9 opacity-0 pointer-events-none"
+      />
+      <video
+        ref={videoRef}
+        muted
+        playsInline
+        aria-hidden="true"
+        className="fixed -left-[9999px] top-0 w-16 h-9 opacity-0 pointer-events-none"
+      />
     </section>
   );
 }
@@ -447,20 +512,22 @@ export function FloatingWidgetOverlay({
   const widgetRef = useRef<HTMLDivElement | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  const clampPosition = useCallback((x: number, y: number) => {
-    const el = widgetRef.current;
-    const width = el?.offsetWidth ?? (expanded ? 280 : 196);
-    const height = el?.offsetHeight ?? (expanded ? 260 : 52);
-    const margin = 12;
-    const maxX = Math.max(margin, window.innerWidth - width - margin);
-    const maxY = Math.max(margin, window.innerHeight - height - margin);
-    return {
-      x: Math.min(Math.max(margin, x), maxX),
-      y: Math.min(Math.max(margin, y), maxY),
-    };
-  }, [expanded]);
+  const clampPosition = useCallback(
+    (x: number, y: number) => {
+      const el = widgetRef.current;
+      const width = el?.offsetWidth ?? (expanded ? 280 : 196);
+      const height = el?.offsetHeight ?? (expanded ? 260 : 52);
+      const margin = 12;
+      const maxX = Math.max(margin, window.innerWidth - width - margin);
+      const maxY = Math.max(margin, window.innerHeight - height - margin);
+      return {
+        x: Math.min(Math.max(margin, x), maxX),
+        y: Math.min(Math.max(margin, y), maxY),
+      };
+    },
+    [expanded]
+  );
 
-  // Keep widget inside viewport when resizing or expanding
   useEffect(() => {
     if (!visible) return;
     const syncBounds = () => {
@@ -477,7 +544,6 @@ export function FloatingWidgetOverlay({
   const completedCount = habits.filter((h) => h.completedDates.includes(todayKey)).length;
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    // Ignore drags starting directly on action buttons
     if ((e.target as HTMLElement).closest('button[data-no-drag="true"]')) {
       return;
     }
@@ -517,14 +583,12 @@ export function FloatingWidgetOverlay({
     }
 
     if (!wasMoved) {
-      // Treat as tap when in compact mode
       if (!expanded) {
         setExpanded(true);
       }
       return;
     }
 
-    // Snap smoothly to nearest horizontal screen edge like a smartphone floating widget
     const el = widgetRef.current;
     const width = el?.offsetWidth ?? (expanded ? 280 : 196);
     const margin = 12;
@@ -579,7 +643,6 @@ export function FloatingWidgetOverlay({
         </div>
       ) : (
         <div className="w-[276px] bg-[#111815] text-white rounded-2xl shadow-xl shadow-slate-900/25 border border-white/10 overflow-hidden">
-          {/* Drag header */}
           <div
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
@@ -614,7 +677,6 @@ export function FloatingWidgetOverlay({
             </div>
           </div>
 
-          {/* Quick habit check-off */}
           <div className="p-2.5 max-h-[220px] overflow-y-auto space-y-1">
             {habits.length === 0 ? (
               <p className="text-xs text-slate-400 py-3 text-center">
