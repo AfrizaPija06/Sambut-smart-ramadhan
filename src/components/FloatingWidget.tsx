@@ -5,7 +5,6 @@ import {
   EyeOff,
   GripVertical,
   Minimize2,
-  Moon,
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -27,25 +26,6 @@ declare global {
   interface Window {
     documentPictureInPicture?: DocumentPictureInPicture;
   }
-}
-
-function fillRoundedRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number
-) {
-  const radius = Math.min(r, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.arcTo(x + w, y, x + w, y + h, radius);
-  ctx.arcTo(x + w, y + h, x, y + h, radius);
-  ctx.arcTo(x, y + h, x, y, radius);
-  ctx.arcTo(x, y, x + w, y, radius);
-  ctx.closePath();
-  ctx.fill();
 }
 
 interface FloatingWidgetControlProps {
@@ -78,7 +58,7 @@ export function FloatingWidgetControl({
   const todayKey = toLocalDateKey();
   const completedCount = habits.filter((h) => h.completedDates.includes(todayKey)).length;
 
-  // Draw large, high-contrast 16:9 frame optimized for small smartphone PiP floating windows
+  // Draw compact 1:1 bubble badge for mobile Picture-in-Picture
   const drawCanvasFrame = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -87,54 +67,59 @@ export function FloatingWidgetControl({
 
     const w = canvas.width;
     const h = canvas.height;
+    const cx = w / 2;
+    const cy = h / 2 + 14; // Extra top clearance below mobile PiP domain bar
+    const radius = 112;
 
-    // Deep forest-slate canvas
+    // Clean dark backdrop
     ctx.fillStyle = '#0F1714';
     ctx.fillRect(0, 0, w, h);
 
-    // Top emerald accent strip
-    ctx.fillStyle = '#18A87C';
-    ctx.fillRect(0, 0, w, 12);
+    // Bubble disc
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fillStyle = '#13241D';
+    ctx.fill();
 
-    // Header date line
-    ctx.fillStyle = '#A7F3D0';
-    ctx.font = '600 24px "Plus Jakarta Sans", system-ui, sans-serif';
-    ctx.fillText(`MENUJU RAMADAN ${hijriYear} H  ·  ${formatIndonesianDate(targetDateStr)}`, 36, 68);
+    // Subtle track ring
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = '#243D33';
+    ctx.stroke();
 
-    // Primary large countdown (high legibility when shrunk to corner PiP on phone)
-    ctx.fillStyle = '#FFFFFF';
-    if (countdown.isRamadan) {
-      ctx.font = '700 72px "Plus Jakarta Sans", system-ui, sans-serif';
-      ctx.fillText(`Hari ke-${countdown.ramadanDay}`, 36, 178);
-    } else {
-      ctx.font = '700 84px "JetBrains Mono", ui-monospace, monospace';
-      const hrs = String(countdown.hours).padStart(2, '0');
-      const mins = String(countdown.minutes).padStart(2, '0');
-      const secs = String(countdown.seconds).padStart(2, '0');
-      ctx.fillText(`${countdown.days}H  ${hrs}:${mins}:${secs}`, 36, 184);
-    }
-
-    // Habit progress footer
+    // Habit progress ring arc
     const total = habits.length;
     const pct = total > 0 ? completedCount / total : 0;
-
-    ctx.fillStyle = '#D1DBD7';
-    ctx.font = '600 26px "Plus Jakarta Sans", system-ui, sans-serif';
-    ctx.fillText(`Kebiasaan hari ini: ${completedCount} / ${total} selesai`, 36, 266);
-
-    // Progress bar track
-    const barX = 36;
-    const barY = 296;
-    const barW = w - 72;
-    const barH = 18;
-    ctx.fillStyle = '#24332E';
-    fillRoundedRect(ctx, barX, barY, barW, barH, 9);
-
     if (pct > 0) {
-      ctx.fillStyle = '#18A87C';
-      fillRoundedRect(ctx, barX, barY, Math.max(18, Math.round(barW * pct)), barH, 9);
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct);
+      ctx.lineWidth = 6;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = '#18A87C';
+      ctx.stroke();
     }
-  }, [completedCount, countdown, habits.length, hijriYear, targetDateStr]);
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Top label inside bubble
+    ctx.fillStyle = '#6EE7B7';
+    ctx.font = '600 17px "Plus Jakarta Sans", system-ui, sans-serif';
+    ctx.fillText(countdown.isRamadan ? 'RAMADAN' : `RAMADAN ${hijriYear}H`, cx, cy - 52);
+
+    // Primary H-XX countdown
+    const mainText = countdown.isRamadan ? `H-${countdown.ramadanDay}` : `H-${countdown.days}`;
+    const fontSize = mainText.length >= 5 ? 54 : 66;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = `700 ${fontSize}px "JetBrains Mono", ui-monospace, monospace`;
+    ctx.fillText(mainText, cx, cy + 4);
+
+    // Bottom habit count inside bubble
+    ctx.fillStyle = '#CBD5D1';
+    ctx.font = '600 18px "Plus Jakarta Sans", system-ui, sans-serif';
+    ctx.fillText(`${completedCount}/${total} habit`, cx, cy + 56);
+  }, [completedCount, countdown.days, countdown.isRamadan, countdown.ramadanDay, habits.length, hijriYear]);
 
   const syncDocumentPip = useCallback(() => {
     const win = pipWinRef.current;
@@ -143,14 +128,9 @@ export function FloatingWidgetControl({
 
     const timerEl = doc.getElementById('pip-timer');
     if (timerEl) {
-      if (countdown.isRamadan) {
-        timerEl.textContent = `Hari ke-${countdown.ramadanDay} Ramadan`;
-      } else {
-        const hrs = String(countdown.hours).padStart(2, '0');
-        const mins = String(countdown.minutes).padStart(2, '0');
-        const secs = String(countdown.seconds).padStart(2, '0');
-        timerEl.textContent = `${countdown.days}h ${hrs}:${mins}:${secs}`;
-      }
+      timerEl.textContent = countdown.isRamadan
+        ? `Hari ke-${countdown.ramadanDay} Ramadan`
+        : `H-${countdown.days}`;
     }
 
     const summaryEl = doc.getElementById('pip-habit-summary');
@@ -181,9 +161,8 @@ export function FloatingWidgetControl({
         listEl.appendChild(btn);
       });
     }
-  }, [completedCount, countdown, habits, onToggleHabit, todayKey]);
+  }, [completedCount, countdown.days, countdown.isRamadan, countdown.ramadanDay, habits, onToggleHabit, todayKey]);
 
-  // Redraw active PiP every second or when habits change
   useEffect(() => {
     if (!pipActive) return;
     if (pipWinRef.current && !pipWinRef.current.closed) {
@@ -247,12 +226,11 @@ export function FloatingWidgetControl({
       return;
     }
 
-    // 1. Try Document Picture-in-Picture (interactive window on supported browsers)
     if (window.documentPictureInPicture?.requestWindow) {
       try {
         const pipWin = await window.documentPictureInPicture.requestWindow({
-          width: 310,
-          height: 280,
+          width: 240,
+          height: 240,
         });
         pipWinRef.current = pipWin;
 
@@ -266,15 +244,15 @@ export function FloatingWidgetControl({
             padding: 14px;
             user-select: none;
           }
-          .kicker { font-size: 11px; color: #94A39D; letter-spacing: 0.01em; }
+          .kicker { font-size: 11px; color: #94A39D; }
           .timer {
             font-family: ui-monospace, SFMono-Regular, monospace;
-            font-size: 26px;
+            font-size: 32px;
             font-weight: 700;
-            margin-top: 4px;
+            margin-top: 2px;
             font-variant-numeric: tabular-nums;
           }
-          .summary { font-size: 12px; color: #6EE7B7; margin-top: 8px; margin-bottom: 8px; }
+          .summary { font-size: 12px; color: #6EE7B7; margin-top: 6px; margin-bottom: 8px; }
           .list { display: flex; flex-direction: column; gap: 6px; }
           .habit-btn {
             width: 100%;
@@ -332,7 +310,6 @@ export function FloatingWidgetControl({
       }
     }
 
-    // 2. Mobile & cross-browser Canvas -> Video Picture-in-Picture
     try {
       const canvas = canvasRef.current;
       const video = videoRef.current;
@@ -341,7 +318,7 @@ export function FloatingWidgetControl({
       }
 
       drawCanvasFrame();
-      const stream = canvas.captureStream(5);
+      const stream = canvas.captureStream(2);
       streamRef.current = stream;
       video.srcObject = stream;
       video.muted = true;
@@ -367,7 +344,7 @@ export function FloatingWidgetControl({
         };
         setPipActive(true);
         setPipNotice(
-          'Floating Window aktif. Kamu bisa tekan tombol Home di HP dan jendela hitung mundur akan tetap mengambang.'
+          'Bubble PiP aktif. Tekan Home di HP agar bubble hitung mundur tetap mengambang.'
         );
       } else if (
         typeof video.webkitSupportsPresentationMode === 'function' &&
@@ -376,14 +353,14 @@ export function FloatingWidgetControl({
       ) {
         video.webkitSetPresentationMode('picture-in-picture');
         setPipActive(true);
-        setPipNotice('Floating Window iOS aktif. Tekan Home untuk melihat widget tetap mengambang.');
+        setPipNotice('Bubble PiP iOS aktif. Tekan Home untuk melihat bubble tetap mengambang.');
       } else {
         throw new Error('Picture-in-Picture tidak tersedia.');
       }
     } catch {
       await stopPip();
       setPipNotice(
-        'Mode PiP luar aplikasi tidak tersedia di browser/WebView ini. Gunakan Widget Dalam Layar di samping, atau buka link Vercel langsung lewat Chrome di HP.'
+        'Mode PiP luar aplikasi tidak tersedia di browser/WebView ini. Gunakan Bubble Dalam Layar atau buka link Vercel lewat Chrome di HP.'
       );
     }
   };
@@ -393,15 +370,13 @@ export function FloatingWidgetControl({
       aria-label="Pengaturan floating widget"
       className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-6"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-base sm:text-lg font-semibold tracking-tight text-slate-900">
-            Floating Widget Smartphone
-          </h2>
-          <p className="mt-1 text-xs sm:text-sm text-slate-500">
-            Aktifkan pengingat mengambang di dalam layar atau pop-out Picture-in-Picture agar tetap tampil saat membuka aplikasi lain.
-          </p>
-        </div>
+      <div>
+        <h2 className="text-base sm:text-lg font-semibold tracking-tight text-slate-900">
+          Floating Bubble Smartphone
+        </h2>
+        <p className="mt-1 text-xs sm:text-sm text-slate-500">
+          Tampilkan bubble ringkas H-berapa di dalam layar atau sebagai jendela mengambang (PiP) saat keluar ke Home.
+        </p>
       </div>
 
       <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -418,12 +393,12 @@ export function FloatingWidgetControl({
           {isOverlayVisible ? (
             <>
               <EyeOff className="w-4 h-4 shrink-0" aria-hidden="true" />
-              <span className="whitespace-nowrap">Sembunyikan Widget</span>
+              <span className="whitespace-nowrap">Sembunyikan Bubble</span>
             </>
           ) : (
             <>
               <Eye className="w-4 h-4 shrink-0" aria-hidden="true" />
-              <span className="whitespace-nowrap">Widget Dalam Layar</span>
+              <span className="whitespace-nowrap">Bubble Dalam Layar</span>
             </>
           )}
         </button>
@@ -440,30 +415,30 @@ export function FloatingWidgetControl({
         >
           <ExternalLink className="w-4 h-4 shrink-0" aria-hidden="true" />
           <span className="whitespace-nowrap">
-            {pipActive ? 'Tutup Floating (PiP)' : 'Floating Luar App (PiP)'}
+            {pipActive ? 'Tutup Bubble (PiP)' : 'Bubble Luar App (PiP)'}
           </span>
         </button>
       </div>
 
       <p className="mt-3 text-xs text-slate-500 leading-relaxed" role="status">
         {pipNotice ??
-          'Tip HP: Buka link Vercel di Chrome Android, ketuk Floating Luar App (PiP), lalu tekan tombol Home agar widget tetap melayang di layar.'}
+          'Tip HP: Buka lewat Chrome di HP, ketuk Bubble Luar App (PiP), lalu tekan Home untuk melihat bubble H-berapa mengambang.'}
       </p>
 
-      {/* Off-screen (NOT display:none) canvas & video so mobile Chrome/Safari actively decode PiP frames */}
+      {/* Square 1:1 off-screen canvas & video so mobile Chrome renders a compact bubble PiP */}
       <canvas
         ref={canvasRef}
-        width={640}
-        height={360}
+        width={320}
+        height={320}
         aria-hidden="true"
-        className="fixed -left-[9999px] top-0 w-16 h-9 opacity-0 pointer-events-none"
+        className="fixed -left-[9999px] top-0 w-16 h-16 opacity-0 pointer-events-none"
       />
       <video
         ref={videoRef}
         muted
         playsInline
         aria-hidden="true"
-        className="fixed -left-[9999px] top-0 w-16 h-9 opacity-0 pointer-events-none"
+        className="fixed -left-[9999px] top-0 w-16 h-16 opacity-0 pointer-events-none"
       />
     </section>
   );
@@ -488,7 +463,7 @@ export function FloatingWidgetOverlay({
   const [pos, setPos] = useState<{ x: number; y: number }>(() => {
     if (typeof window === 'undefined') return { x: 16, y: 80 };
     return {
-      x: Math.max(12, window.innerWidth - 210),
+      x: Math.max(12, window.innerWidth - 84),
       y: Math.max(72, window.innerHeight - 130),
     };
   });
@@ -515,8 +490,8 @@ export function FloatingWidgetOverlay({
   const clampPosition = useCallback(
     (x: number, y: number) => {
       const el = widgetRef.current;
-      const width = el?.offsetWidth ?? (expanded ? 280 : 196);
-      const height = el?.offsetHeight ?? (expanded ? 260 : 52);
+      const width = el?.offsetWidth ?? (expanded ? 276 : 68);
+      const height = el?.offsetHeight ?? (expanded ? 260 : 68);
       const margin = 12;
       const maxX = Math.max(margin, window.innerWidth - width - margin);
       const maxY = Math.max(margin, window.innerHeight - height - margin);
@@ -590,24 +565,25 @@ export function FloatingWidgetOverlay({
     }
 
     const el = widgetRef.current;
-    const width = el?.offsetWidth ?? (expanded ? 280 : 196);
+    const width = el?.offsetWidth ?? (expanded ? 276 : 68);
     const margin = 12;
     const snapLeft = pos.x + width / 2 < window.innerWidth / 2;
     const targetX = snapLeft ? margin : Math.max(margin, window.innerWidth - width - margin);
     setPos((prev) => clampPosition(targetX, prev.y));
   };
 
-  const compactLabel = countdown.isRamadan
-    ? `Ramadan H-${countdown.ramadanDay}`
-    : `${countdown.days}h ${String(countdown.hours).padStart(2, '0')}j ${String(
+  const bubbleTitle = countdown.isRamadan ? `H-${countdown.ramadanDay}` : `H-${countdown.days}`;
+  const headerTimer = countdown.isRamadan
+    ? `Ramadan Hari ${countdown.ramadanDay}`
+    : `H-${countdown.days} · ${String(countdown.hours).padStart(2, '0')}:${String(
         countdown.minutes
-      ).padStart(2, '0')}m`;
+      ).padStart(2, '0')}`;
 
   return (
     <div
       ref={widgetRef}
       role="dialog"
-      aria-label="Floating widget Ramadan"
+      aria-label="Floating bubble Ramadan"
       style={{
         transform: `translate3d(${pos.x}px, ${pos.y}px, 0)`,
       }}
@@ -620,26 +596,15 @@ export function FloatingWidgetOverlay({
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
-          className="touch-none cursor-grab active:cursor-grabbing bg-[#111815] text-white rounded-2xl shadow-lg shadow-slate-900/20 border border-white/10 pl-3 pr-1.5 h-12 flex items-center gap-2.5"
+          title="Ketuk untuk buka kebiasaan, geser untuk pindah posisi"
+          className="touch-none cursor-grab active:cursor-grabbing w-[68px] h-[68px] rounded-full bg-[#0D6E52] text-white shadow-lg shadow-slate-900/25 border-2 border-white/25 flex flex-col items-center justify-center"
         >
-          <Moon className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden="true" />
-          <div className="leading-tight">
-            <div className="font-mono text-xs font-semibold tabular-nums whitespace-nowrap">
-              {compactLabel}
-            </div>
-            <div className="text-[11px] text-slate-300 tabular-nums whitespace-nowrap">
-              {completedCount}/{habits.length} kebiasaan
-            </div>
-          </div>
-          <button
-            type="button"
-            data-no-drag="true"
-            onClick={onClose}
-            aria-label="Tutup floating widget"
-            className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
+          <span className="font-mono text-sm font-bold leading-none tabular-nums">
+            {bubbleTitle}
+          </span>
+          <span className="mt-1 text-[10px] font-medium text-emerald-100 leading-none tabular-nums">
+            {completedCount}/{habits.length}
+          </span>
         </div>
       ) : (
         <div className="w-[276px] bg-[#111815] text-white rounded-2xl shadow-xl shadow-slate-900/25 border border-white/10 overflow-hidden">
@@ -652,7 +617,7 @@ export function FloatingWidgetOverlay({
             <div className="flex items-center gap-2 min-w-0">
               <GripVertical className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true" />
               <span className="font-mono text-xs font-semibold text-emerald-300 tabular-nums truncate">
-                {compactLabel}
+                {headerTimer}
               </span>
             </div>
             <div className="flex items-center shrink-0">
@@ -660,7 +625,7 @@ export function FloatingWidgetOverlay({
                 type="button"
                 data-no-drag="true"
                 onClick={() => setExpanded(false)}
-                aria-label="Perkecil widget"
+                aria-label="Perkecil jadi bubble"
                 className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
               >
                 <Minimize2 className="w-3.5 h-3.5" />
@@ -669,7 +634,7 @@ export function FloatingWidgetOverlay({
                 type="button"
                 data-no-drag="true"
                 onClick={onClose}
-                aria-label="Tutup widget"
+                aria-label="Tutup bubble"
                 className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
               >
                 <X className="w-3.5 h-3.5" />
