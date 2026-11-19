@@ -1,0 +1,6 @@
+{
+  "name": "Sambut Ramadan",
+  "description": "Pengingat hitung mundur Ramadan dengan floating widget smartphone dan pembangun kebiasaan harian.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
