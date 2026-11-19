@@ -1,15 +1,7 @@
-import {
-  Check,
-  ExternalLink,
-  Eye,
-  EyeOff,
-  GripVertical,
-  Minimize2,
-  X,
-} from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CountdownTime, Habit } from '../types';
-import { formatIndonesianDate, toLocalDateKey } from '../utils/ramadan';
+import { toLocalDateKey } from '../utils/ramadan';
 
 interface DocumentPictureInPicture {
   requestWindow(options?: { width?: number; height?: number }): Promise<Window>;
@@ -29,24 +21,11 @@ declare global {
 }
 
 interface FloatingWidgetControlProps {
-  isOverlayVisible: boolean;
-  onToggleOverlay: () => void;
   countdown: CountdownTime;
-  targetDateStr: string;
-  hijriYear: number;
   habits: Habit[];
-  onToggleHabit: (habitId: string) => void;
 }
 
-export function FloatingWidgetControl({
-  isOverlayVisible,
-  onToggleOverlay,
-  countdown,
-  targetDateStr,
-  hijriYear,
-  habits,
-  onToggleHabit,
-}: FloatingWidgetControlProps) {
+export function FloatingWidgetControl({ countdown, habits }: FloatingWidgetControlProps) {
   const [pipActive, setPipActive] = useState(false);
   const [pipNotice, setPipNotice] = useState<string | null>(null);
 
@@ -58,7 +37,7 @@ export function FloatingWidgetControl({
   const todayKey = toLocalDateKey();
   const completedCount = habits.filter((h) => h.completedDates.includes(todayKey)).length;
 
-  // Draw compact 1:1 bubble badge for mobile Picture-in-Picture
+  // Draw clean emerald green bubble (matching the compact H-XX + 0/4 style) for mobile PiP
   const drawCanvasFrame = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -68,58 +47,46 @@ export function FloatingWidgetControl({
     const w = canvas.width;
     const h = canvas.height;
     const cx = w / 2;
-    const cy = h / 2 + 14; // Extra top clearance below mobile PiP domain bar
-    const radius = 112;
+    const cy = h / 2 + 12; // Offset slightly down so Android's top domain strip never overlaps
 
-    // Clean dark backdrop
-    ctx.fillStyle = '#0F1714';
+    // Full-bleed emerald bubble surface (Android rounds PiP corners automatically)
+    ctx.fillStyle = '#0D6E52';
     ctx.fillRect(0, 0, w, h);
 
-    // Bubble disc
+    // Subtle inner ring accent
     ctx.beginPath();
-    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.fillStyle = '#13241D';
-    ctx.fill();
-
-    // Subtle track ring
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = '#243D33';
+    ctx.arc(cx, cy, 118, 0, Math.PI * 2);
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
     ctx.stroke();
 
-    // Habit progress ring arc
+    // Habit progress arc along the subtle ring
     const total = habits.length;
     const pct = total > 0 ? completedCount / total : 0;
     if (pct > 0) {
       ctx.beginPath();
-      ctx.arc(cx, cy, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct);
-      ctx.lineWidth = 6;
+      ctx.arc(cx, cy, 118, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct);
+      ctx.lineWidth = 5;
       ctx.lineCap = 'round';
-      ctx.strokeStyle = '#18A87C';
+      ctx.strokeStyle = '#FFFFFF';
       ctx.stroke();
     }
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    // Top label inside bubble
-    ctx.fillStyle = '#6EE7B7';
-    ctx.font = '600 17px "Plus Jakarta Sans", system-ui, sans-serif';
-    ctx.fillText(countdown.isRamadan ? 'RAMADAN' : `RAMADAN ${hijriYear}H`, cx, cy - 52);
-
-    // Primary H-XX countdown
+    // Primary H-XX text
     const mainText = countdown.isRamadan ? `H-${countdown.ramadanDay}` : `H-${countdown.days}`;
-    const fontSize = mainText.length >= 5 ? 54 : 66;
+    const fontSize = mainText.length >= 5 ? 64 : 80;
     ctx.fillStyle = '#FFFFFF';
     ctx.font = `700 ${fontSize}px "JetBrains Mono", ui-monospace, monospace`;
-    ctx.fillText(mainText, cx, cy + 4);
+    ctx.fillText(mainText, cx, cy - 12);
 
-    // Bottom habit count inside bubble
-    ctx.fillStyle = '#CBD5D1';
-    ctx.font = '600 18px "Plus Jakarta Sans", system-ui, sans-serif';
-    ctx.fillText(`${completedCount}/${total} habit`, cx, cy + 56);
-  }, [completedCount, countdown.days, countdown.isRamadan, countdown.ramadanDay, habits.length, hijriYear]);
+    // Habit counter directly below H-XX
+    ctx.fillStyle = '#D1FAE5';
+    ctx.font = '600 28px "Plus Jakarta Sans", system-ui, sans-serif';
+    ctx.fillText(`${completedCount}/${total}`, cx, cy + 48);
+  }, [completedCount, countdown.days, countdown.isRamadan, countdown.ramadanDay, habits.length]);
 
   const syncDocumentPip = useCallback(() => {
     const win = pipWinRef.current;
@@ -129,39 +96,15 @@ export function FloatingWidgetControl({
     const timerEl = doc.getElementById('pip-timer');
     if (timerEl) {
       timerEl.textContent = countdown.isRamadan
-        ? `Hari ke-${countdown.ramadanDay} Ramadan`
+        ? `H-${countdown.ramadanDay}`
         : `H-${countdown.days}`;
     }
 
     const summaryEl = doc.getElementById('pip-habit-summary');
     if (summaryEl) {
-      summaryEl.textContent = `${completedCount}/${habits.length} kebiasaan hari ini`;
+      summaryEl.textContent = `${completedCount}/${habits.length}`;
     }
-
-    const listEl = doc.getElementById('pip-habit-list');
-    if (listEl) {
-      listEl.innerHTML = '';
-      habits.forEach((habit) => {
-        const done = habit.completedDates.includes(todayKey);
-        const btn = doc.createElement('button');
-        btn.type = 'button';
-        btn.className = `habit-btn ${done ? 'done' : ''}`;
-        btn.onclick = () => onToggleHabit(habit.id);
-
-        const box = doc.createElement('span');
-        box.className = 'box';
-        box.textContent = done ? '✓' : '';
-
-        const label = doc.createElement('span');
-        label.className = 'label';
-        label.textContent = habit.title;
-
-        btn.appendChild(box);
-        btn.appendChild(label);
-        listEl.appendChild(btn);
-      });
-    }
-  }, [completedCount, countdown.days, countdown.isRamadan, countdown.ramadanDay, habits, onToggleHabit, todayKey]);
+  }, [completedCount, countdown.days, countdown.isRamadan, countdown.ramadanDay, habits.length]);
 
   useEffect(() => {
     if (!pipActive) return;
@@ -229,72 +172,46 @@ export function FloatingWidgetControl({
     if (window.documentPictureInPicture?.requestWindow) {
       try {
         const pipWin = await window.documentPictureInPicture.requestWindow({
-          width: 240,
-          height: 240,
+          width: 170,
+          height: 170,
         });
         pipWinRef.current = pipWin;
 
         const style = pipWin.document.createElement('style');
         style.textContent = `
           * { box-sizing: border-box; margin: 0; padding: 0; }
-          body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            background: #0F1714;
-            color: #F8FAF9;
-            padding: 14px;
-            user-select: none;
-          }
-          .kicker { font-size: 11px; color: #94A39D; }
-          .timer {
-            font-family: ui-monospace, SFMono-Regular, monospace;
-            font-size: 32px;
-            font-weight: 700;
-            margin-top: 2px;
-            font-variant-numeric: tabular-nums;
-          }
-          .summary { font-size: 12px; color: #6EE7B7; margin-top: 6px; margin-bottom: 8px; }
-          .list { display: flex; flex-direction: column; gap: 6px; }
-          .habit-btn {
+          html, body {
             width: 100%;
-            min-height: 36px;
+            height: 100%;
+            background: #0D6E52;
+            color: #FFFFFF;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 6px 8px;
-            border-radius: 8px;
-            border: 1px solid #24332E;
-            background: #17221E;
-            color: #F8FAF9;
-            font-size: 12px;
-            text-align: left;
-            cursor: pointer;
-          }
-          .habit-btn.done { color: #8A9993; text-decoration: line-through; }
-          .box {
-            width: 18px;
-            height: 18px;
-            border-radius: 5px;
-            border: 1px solid #4A5E57;
-            display: inline-flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
-            font-size: 11px;
-            flex-shrink: 0;
+            user-select: none;
           }
-          .habit-btn.done .box {
-            background: #0D6E52;
-            border-color: #0D6E52;
-            color: #fff;
+          .timer {
+            font-family: ui-monospace, SFMono-Regular, monospace;
+            font-size: 38px;
+            font-weight: 700;
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
           }
-          .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+          .summary {
+            font-size: 16px;
+            font-weight: 600;
+            color: #D1FAE5;
+            margin-top: 8px;
+            font-variant-numeric: tabular-nums;
+          }
         `;
         pipWin.document.head.appendChild(style);
 
         pipWin.document.body.innerHTML = `
-          <div class="kicker">Ramadan ${hijriYear} H · ${formatIndonesianDate(targetDateStr)}</div>
           <div id="pip-timer" class="timer"></div>
           <div id="pip-habit-summary" class="summary"></div>
-          <div id="pip-habit-list" class="list"></div>
         `;
 
         pipWin.addEventListener('pagehide', () => {
@@ -344,7 +261,7 @@ export function FloatingWidgetControl({
         };
         setPipActive(true);
         setPipNotice(
-          'Bubble PiP aktif. Tekan Home di HP agar bubble hitung mundur tetap mengambang.'
+          'Bubble aktif. Tekan tombol Home di HP agar bubble H-berapa tetap mengambang di layar.'
         );
       } else if (
         typeof video.webkitSupportsPresentationMode === 'function' &&
@@ -353,21 +270,21 @@ export function FloatingWidgetControl({
       ) {
         video.webkitSetPresentationMode('picture-in-picture');
         setPipActive(true);
-        setPipNotice('Bubble PiP iOS aktif. Tekan Home untuk melihat bubble tetap mengambang.');
+        setPipNotice('Bubble iOS aktif. Tekan Home untuk melihat bubble tetap mengambang.');
       } else {
         throw new Error('Picture-in-Picture tidak tersedia.');
       }
     } catch {
       await stopPip();
       setPipNotice(
-        'Mode PiP luar aplikasi tidak tersedia di browser/WebView ini. Gunakan Bubble Dalam Layar atau buka link Vercel lewat Chrome di HP.'
+        'Browser/pratinjau ini membatasi mode Picture-in-Picture. Buka link Vercel langsung lewat Chrome di HP.'
       );
     }
   };
 
   return (
     <section
-      aria-label="Pengaturan floating widget"
+      aria-label="Floating bubble smartphone"
       className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-6"
     >
       <div>
@@ -375,57 +292,32 @@ export function FloatingWidgetControl({
           Floating Bubble Smartphone
         </h2>
         <p className="mt-1 text-xs sm:text-sm text-slate-500">
-          Tampilkan bubble ringkas H-berapa di dalam layar atau sebagai jendela mengambang (PiP) saat keluar ke Home.
+          Munculkan bubble hitung mundur ringkas yang tetap mengambang saat kamu menekan tombol Home di HP.
         </p>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-        <button
-          type="button"
-          onClick={onToggleOverlay}
-          aria-pressed={isOverlayVisible}
-          className={`min-h-[48px] px-4 rounded-xl text-sm font-medium inline-flex items-center justify-center gap-2 border transition-all active:scale-[0.98] ${
-            isOverlayVisible
-              ? 'bg-[#0D6E52] border-[#0D6E52] text-white hover:bg-[#095540]'
-              : 'bg-slate-50 border-slate-200 text-slate-800 hover:bg-slate-100'
-          }`}
-        >
-          {isOverlayVisible ? (
-            <>
-              <EyeOff className="w-4 h-4 shrink-0" aria-hidden="true" />
-              <span className="whitespace-nowrap">Sembunyikan Bubble</span>
-            </>
-          ) : (
-            <>
-              <Eye className="w-4 h-4 shrink-0" aria-hidden="true" />
-              <span className="whitespace-nowrap">Bubble Dalam Layar</span>
-            </>
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={handleLaunchPip}
-          aria-pressed={pipActive}
-          className={`min-h-[48px] px-4 rounded-xl text-sm font-medium inline-flex items-center justify-center gap-2 border transition-all active:scale-[0.98] ${
-            pipActive
-              ? 'bg-slate-900 border-slate-900 text-white'
-              : 'bg-white border-slate-200 text-slate-800 hover:bg-slate-50'
-          }`}
-        >
-          <ExternalLink className="w-4 h-4 shrink-0" aria-hidden="true" />
-          <span className="whitespace-nowrap">
-            {pipActive ? 'Tutup Bubble (PiP)' : 'Bubble Luar App (PiP)'}
-          </span>
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={handleLaunchPip}
+        aria-pressed={pipActive}
+        className={`mt-4 w-full min-h-[48px] px-4 rounded-xl text-sm font-medium inline-flex items-center justify-center gap-2 border transition-all active:scale-[0.98] ${
+          pipActive
+            ? 'bg-slate-900 border-slate-900 text-white hover:bg-slate-800'
+            : 'bg-[#0D6E52] border-[#0D6E52] text-white hover:bg-[#095540]'
+        }`}
+      >
+        <ExternalLink className="w-4 h-4 shrink-0" aria-hidden="true" />
+        <span className="whitespace-nowrap">
+          {pipActive ? 'Tutup Floating Bubble' : 'Aktifkan Floating Bubble'}
+        </span>
+      </button>
 
       <p className="mt-3 text-xs text-slate-500 leading-relaxed" role="status">
         {pipNotice ??
-          'Tip HP: Buka lewat Chrome di HP, ketuk Bubble Luar App (PiP), lalu tekan Home untuk melihat bubble H-berapa mengambang.'}
+          'Buka lewat Chrome di HP, ketuk Aktifkan Floating Bubble, lalu tekan tombol Home.'}
       </p>
 
-      {/* Square 1:1 off-screen canvas & video so mobile Chrome renders a compact bubble PiP */}
+      {/* Square 1:1 off-screen canvas & video for mobile PiP bubble */}
       <canvas
         ref={canvasRef}
         width={320}
@@ -441,247 +333,5 @@ export function FloatingWidgetControl({
         className="fixed -left-[9999px] top-0 w-16 h-16 opacity-0 pointer-events-none"
       />
     </section>
-  );
-}
-
-interface FloatingWidgetOverlayProps {
-  visible: boolean;
-  onClose: () => void;
-  countdown: CountdownTime;
-  habits: Habit[];
-  onToggleHabit: (habitId: string) => void;
-}
-
-export function FloatingWidgetOverlay({
-  visible,
-  onClose,
-  countdown,
-  habits,
-  onToggleHabit,
-}: FloatingWidgetOverlayProps) {
-  const [expanded, setExpanded] = useState(false);
-  const [pos, setPos] = useState<{ x: number; y: number }>(() => {
-    if (typeof window === 'undefined') return { x: 16, y: 80 };
-    return {
-      x: Math.max(12, window.innerWidth - 84),
-      y: Math.max(72, window.innerHeight - 130),
-    };
-  });
-
-  const dragRef = useRef<{
-    active: boolean;
-    moved: boolean;
-    startX: number;
-    startY: number;
-    originX: number;
-    originY: number;
-  }>({
-    active: false,
-    moved: false,
-    startX: 0,
-    startY: 0,
-    originX: 0,
-    originY: 0,
-  });
-
-  const widgetRef = useRef<HTMLDivElement | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-
-  const clampPosition = useCallback(
-    (x: number, y: number) => {
-      const el = widgetRef.current;
-      const width = el?.offsetWidth ?? (expanded ? 276 : 68);
-      const height = el?.offsetHeight ?? (expanded ? 260 : 68);
-      const margin = 12;
-      const maxX = Math.max(margin, window.innerWidth - width - margin);
-      const maxY = Math.max(margin, window.innerHeight - height - margin);
-      return {
-        x: Math.min(Math.max(margin, x), maxX),
-        y: Math.min(Math.max(margin, y), maxY),
-      };
-    },
-    [expanded]
-  );
-
-  useEffect(() => {
-    if (!visible) return;
-    const syncBounds = () => {
-      setPos((prev) => clampPosition(prev.x, prev.y));
-    };
-    syncBounds();
-    window.addEventListener('resize', syncBounds);
-    return () => window.removeEventListener('resize', syncBounds);
-  }, [visible, expanded, clampPosition]);
-
-  if (!visible) return null;
-
-  const todayKey = toLocalDateKey();
-  const completedCount = habits.filter((h) => h.completedDates.includes(todayKey)).length;
-
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if ((e.target as HTMLElement).closest('button[data-no-drag="true"]')) {
-      return;
-    }
-    e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = {
-      active: true,
-      moved: false,
-      startX: e.clientX,
-      startY: e.clientY,
-      originX: pos.x,
-      originY: pos.y,
-    };
-    setIsDragging(true);
-  };
-
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragRef.current.active) return;
-    const dx = e.clientX - dragRef.current.startX;
-    const dy = e.clientY - dragRef.current.startY;
-    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-      dragRef.current.moved = true;
-    }
-    const next = clampPosition(dragRef.current.originX + dx, dragRef.current.originY + dy);
-    setPos(next);
-  };
-
-  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragRef.current.active) return;
-    const wasMoved = dragRef.current.moved;
-    dragRef.current.active = false;
-    setIsDragging(false);
-
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {
-      // Ignore if capture already lost
-    }
-
-    if (!wasMoved) {
-      if (!expanded) {
-        setExpanded(true);
-      }
-      return;
-    }
-
-    const el = widgetRef.current;
-    const width = el?.offsetWidth ?? (expanded ? 276 : 68);
-    const margin = 12;
-    const snapLeft = pos.x + width / 2 < window.innerWidth / 2;
-    const targetX = snapLeft ? margin : Math.max(margin, window.innerWidth - width - margin);
-    setPos((prev) => clampPosition(targetX, prev.y));
-  };
-
-  const bubbleTitle = countdown.isRamadan ? `H-${countdown.ramadanDay}` : `H-${countdown.days}`;
-  const headerTimer = countdown.isRamadan
-    ? `Ramadan Hari ${countdown.ramadanDay}`
-    : `H-${countdown.days} · ${String(countdown.hours).padStart(2, '0')}:${String(
-        countdown.minutes
-      ).padStart(2, '0')}`;
-
-  return (
-    <div
-      ref={widgetRef}
-      role="dialog"
-      aria-label="Floating bubble Ramadan"
-      style={{
-        transform: `translate3d(${pos.x}px, ${pos.y}px, 0)`,
-      }}
-      className={`fixed top-0 left-0 z-50 select-none will-change-transform ${
-        isDragging ? '' : 'transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]'
-      }`}
-    >
-      {!expanded ? (
-        <div
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          title="Ketuk untuk buka kebiasaan, geser untuk pindah posisi"
-          className="touch-none cursor-grab active:cursor-grabbing w-[68px] h-[68px] rounded-full bg-[#0D6E52] text-white shadow-lg shadow-slate-900/25 border-2 border-white/25 flex flex-col items-center justify-center"
-        >
-          <span className="font-mono text-sm font-bold leading-none tabular-nums">
-            {bubbleTitle}
-          </span>
-          <span className="mt-1 text-[10px] font-medium text-emerald-100 leading-none tabular-nums">
-            {completedCount}/{habits.length}
-          </span>
-        </div>
-      ) : (
-        <div className="w-[276px] bg-[#111815] text-white rounded-2xl shadow-xl shadow-slate-900/25 border border-white/10 overflow-hidden">
-          <div
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            className="touch-none cursor-grab active:cursor-grabbing pl-3.5 pr-1 py-1 bg-white/5 border-b border-white/10 flex items-center justify-between gap-2"
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <GripVertical className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true" />
-              <span className="font-mono text-xs font-semibold text-emerald-300 tabular-nums truncate">
-                {headerTimer}
-              </span>
-            </div>
-            <div className="flex items-center shrink-0">
-              <button
-                type="button"
-                data-no-drag="true"
-                onClick={() => setExpanded(false)}
-                aria-label="Perkecil jadi bubble"
-                className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
-              >
-                <Minimize2 className="w-3.5 h-3.5" />
-              </button>
-              <button
-                type="button"
-                data-no-drag="true"
-                onClick={onClose}
-                aria-label="Tutup bubble"
-                className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-
-          <div className="p-2.5 max-h-[220px] overflow-y-auto space-y-1">
-            {habits.length === 0 ? (
-              <p className="text-xs text-slate-400 py-3 text-center">
-                Belum ada kebiasaan hari ini.
-              </p>
-            ) : (
-              habits.map((habit) => {
-                const done = habit.completedDates.includes(todayKey);
-                return (
-                  <button
-                    key={habit.id}
-                    type="button"
-                    data-no-drag="true"
-                    onClick={() => onToggleHabit(habit.id)}
-                    className="w-full min-h-[44px] px-2.5 py-1.5 rounded-xl flex items-center gap-2.5 text-left hover:bg-white/10 active:scale-[0.98] transition-all"
-                  >
-                    <span
-                      className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border ${
-                        done
-                          ? 'bg-emerald-500 border-emerald-500 text-slate-950'
-                          : 'border-slate-500 text-transparent'
-                      }`}
-                      aria-hidden="true"
-                    >
-                      <Check className="w-3 h-3 stroke-[3]" />
-                    </span>
-                    <span
-                      className={`text-xs truncate ${
-                        done ? 'text-slate-400 line-through' : 'text-slate-100'
-                      }`}
-                    >
-                      {habit.title}
-                    </span>
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </div>
-      )}
-    </div>
   );
 }

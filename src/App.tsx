@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CountdownCard } from './components/CountdownCard';
-import { FloatingWidgetControl, FloatingWidgetOverlay } from './components/FloatingWidget';
+import { FloatingWidgetControl } from './components/FloatingWidget';
 import { HabitTracker } from './components/HabitTracker';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { Habit } from './types';
@@ -9,7 +9,6 @@ import { getCountdown, getDefaultRamadanTarget, toLocalDateKey } from './utils/r
 const STORAGE_KEYS = {
   habits: 'sambut_ramadan_habits_v1',
   targetDate: 'sambut_ramadan_target_date_v1',
-  widgetVisible: 'sambut_ramadan_widget_visible_v1',
 };
 
 function createStarterHabits(): Habit[] {
@@ -61,25 +60,14 @@ function loadInitialTargetDate(): string | null {
   }
 }
 
-function loadInitialWidgetVisible(): boolean {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.widgetVisible);
-    return raw === null ? true : raw === 'true';
-  } catch {
-    return true;
-  }
-}
-
 export default function App() {
   const defaultTarget = useMemo(() => getDefaultRamadanTarget(), []);
   const [customTargetDate, setCustomTargetDate] = useState<string | null>(loadInitialTargetDate);
   const [habits, setHabits] = useState<Habit[]>(loadInitialHabits);
-  const [widgetVisible, setWidgetVisible] = useState<boolean>(loadInitialWidgetVisible);
   const [now, setNow] = useState<Date>(() => new Date());
 
   const activeTargetDate = customTargetDate ?? defaultTarget.dateStr;
 
-  // Live 1-second tick for countdown
   useEffect(() => {
     const id = window.setInterval(() => {
       setNow(new Date());
@@ -87,7 +75,6 @@ export default function App() {
     return () => window.clearInterval(id);
   }, []);
 
-  // Persist habits
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEYS.habits, JSON.stringify(habits));
@@ -96,7 +83,6 @@ export default function App() {
     }
   }, [habits]);
 
-  // Persist custom target date
   useEffect(() => {
     try {
       if (customTargetDate) {
@@ -108,15 +94,6 @@ export default function App() {
       // Ignore storage errors
     }
   }, [customTargetDate]);
-
-  // Persist floating widget visibility
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEYS.widgetVisible, String(widgetVisible));
-    } catch {
-      // Ignore storage errors
-    }
-  }, [widgetVisible]);
 
   const countdown = useMemo(
     () => getCountdown(activeTargetDate, now),
@@ -169,7 +146,6 @@ export default function App() {
 
   return (
     <div className="min-h-dvh bg-[#f6f7f4] text-slate-900">
-      {/* Clean single-row header */}
       <header className="max-w-5xl mx-auto px-4 sm:px-6 pt-5 pb-4 flex items-center justify-between gap-4">
         <span className="font-display text-lg sm:text-xl font-semibold tracking-tight text-slate-900 whitespace-nowrap shrink-0">
           Sambut Ramadan
@@ -182,8 +158,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main content */}
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 pb-20 grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 items-start">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 pb-16 grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 items-start">
         <div className="lg:col-span-6 space-y-4 sm:space-y-6">
           <CountdownCard
             countdown={countdown}
@@ -194,15 +169,7 @@ export default function App() {
             isCustomDate={customTargetDate !== null && customTargetDate !== defaultTarget.dateStr}
           />
 
-          <FloatingWidgetControl
-            isOverlayVisible={widgetVisible}
-            onToggleOverlay={() => setWidgetVisible((v) => !v)}
-            countdown={countdown}
-            targetDateStr={activeTargetDate}
-            hijriYear={defaultTarget.hijriYear}
-            habits={habits}
-            onToggleHabit={handleToggleHabitToday}
-          />
+          <FloatingWidgetControl countdown={countdown} habits={habits} />
         </div>
 
         <div className="lg:col-span-6">
@@ -215,15 +182,6 @@ export default function App() {
           />
         </div>
       </main>
-
-      {/* Draggable smartphone floating widget */}
-      <FloatingWidgetOverlay
-        visible={widgetVisible}
-        onClose={() => setWidgetVisible(false)}
-        countdown={countdown}
-        habits={habits}
-        onToggleHabit={handleToggleHabitToday}
-      />
     </div>
   );
 }
