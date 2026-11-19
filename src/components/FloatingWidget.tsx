@@ -1,4 +1,4 @@
-import { ExternalLink, SlidersHorizontal } from 'lucide-react';
+import { SlidersHorizontal } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { BubbleColorId, BubbleConfig, BubbleContentMode, CountdownTime, Habit } from '../types';
 import { toLocalDateKey } from '../utils/ramadan';
@@ -30,25 +30,25 @@ const COLOR_THEMES: Record<
     label: 'Hijau',
     bg: '#0D6E52',
     subtext: '#D1FAE5',
-    ringTrack: 'rgba(255, 255, 255, 0.2)',
+    ringTrack: 'rgba(255, 255, 255, 0.22)',
   },
   dark: {
     label: 'Gelap',
     bg: '#131917',
     subtext: '#CBD5D1',
-    ringTrack: 'rgba(255, 255, 255, 0.16)',
+    ringTrack: 'rgba(255, 255, 255, 0.18)',
   },
   navy: {
     label: 'Biru',
     bg: '#1B3B5F',
     subtext: '#DBEAFE',
-    ringTrack: 'rgba(255, 255, 255, 0.2)',
+    ringTrack: 'rgba(255, 255, 255, 0.22)',
   },
   earth: {
     label: 'Cokelat',
     bg: '#6B4226',
     subtext: '#FDE68A',
-    ringTrack: 'rgba(255, 255, 255, 0.2)',
+    ringTrack: 'rgba(255, 255, 255, 0.22)',
   },
 };
 
@@ -119,7 +119,7 @@ export function FloatingWidgetControl({ countdown, habits }: FloatingWidgetContr
       ? `${String(countdown.hours).padStart(2, '0')}:${String(countdown.minutes).padStart(2, '0')}`
       : `${completedCount}/${totalCount}`;
 
-  // Draw customizable 1:1 bubble for mobile PiP
+  // Draw slim 2.3:1 pill frame (368x160) — minimum height Android OS allows for Web PiP
   const drawCanvasFrame = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -128,53 +128,32 @@ export function FloatingWidgetControl({ countdown, habits }: FloatingWidgetContr
 
     const w = canvas.width;
     const h = canvas.height;
-    const cx = w / 2;
-    const cy = h / 2 + 12;
 
     ctx.fillStyle = theme.bg;
     ctx.fillRect(0, 0, w, h);
 
+    // Subtle bottom habit progress bar when ring/progress is enabled
     if (config.showRing) {
-      ctx.beginPath();
-      ctx.arc(cx, cy, 118, 0, Math.PI * 2);
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = theme.ringTrack;
-      ctx.stroke();
-
+      ctx.fillStyle = theme.ringTrack;
+      ctx.fillRect(0, h - 8, w, 8);
       const pct = totalCount > 0 ? completedCount / totalCount : 0;
       if (pct > 0) {
-        ctx.beginPath();
-        ctx.arc(cx, cy, 118, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct);
-        ctx.lineWidth = 5;
-        ctx.lineCap = 'round';
-        ctx.strokeStyle = '#FFFFFF';
-        ctx.stroke();
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, h - 8, Math.round(w * pct), 8);
       }
     }
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    const hasSub = subText.length > 0;
-    const fontSize =
-      config.contentMode === 'countdown-only'
-        ? mainText.length >= 5
-          ? 74
-          : 92
-        : mainText.length >= 5
-        ? 64
-        : 80;
+    const cy = h / 2 + 2;
+    const label = subText ? `${mainText}  ·  ${subText}` : mainText;
+    const fontSize = subText ? (label.length > 11 ? 46 : 54) : 66;
 
     ctx.fillStyle = '#FFFFFF';
     ctx.font = `700 ${fontSize}px "JetBrains Mono", ui-monospace, monospace`;
-    ctx.fillText(mainText, cx, hasSub ? cy - 14 : cy + 2);
-
-    if (hasSub) {
-      ctx.fillStyle = theme.subtext;
-      ctx.font = '600 28px "Plus Jakarta Sans", system-ui, sans-serif';
-      ctx.fillText(subText, cx, cy + 48);
-    }
-  }, [completedCount, config.contentMode, config.showRing, mainText, subText, theme, totalCount]);
+    ctx.fillText(label, w / 2, cy);
+  }, [completedCount, config.showRing, mainText, subText, theme.bg, theme.ringTrack, totalCount]);
 
   const syncDocumentPip = useCallback(() => {
     const win = pipWinRef.current;
@@ -185,16 +164,9 @@ export function FloatingWidgetControl({ countdown, habits }: FloatingWidgetContr
 
     const timerEl = doc.getElementById('pip-timer');
     if (timerEl) {
-      timerEl.textContent = mainText;
+      timerEl.textContent = subText ? `${mainText} · ${subText}` : mainText;
     }
-
-    const summaryEl = doc.getElementById('pip-habit-summary');
-    if (summaryEl) {
-      summaryEl.textContent = subText;
-      summaryEl.style.color = theme.subtext;
-      summaryEl.style.display = subText ? 'block' : 'none';
-    }
-  }, [mainText, subText, theme]);
+  }, [mainText, subText, theme.bg]);
 
   useEffect(() => {
     if (!pipActive) return;
@@ -251,7 +223,7 @@ export function FloatingWidgetControl({ countdown, habits }: FloatingWidgetContr
     };
   }, []);
 
-  const handleLaunchPip = async () => {
+  const handleTogglePip = async () => {
     setPipNotice(null);
 
     if (pipActive) {
@@ -262,8 +234,8 @@ export function FloatingWidgetControl({ countdown, habits }: FloatingWidgetContr
     if (window.documentPictureInPicture?.requestWindow) {
       try {
         const pipWin = await window.documentPictureInPicture.requestWindow({
-          width: 170,
-          height: 170,
+          width: 190,
+          height: 80,
         });
         pipWinRef.current = pipWin;
 
@@ -274,33 +246,21 @@ export function FloatingWidgetControl({ countdown, habits }: FloatingWidgetContr
             width: 100%;
             height: 100%;
             color: #FFFFFF;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-family: ui-monospace, SFMono-Regular, monospace;
             display: flex;
-            flex-direction: column;
             align-items: center;
             justify-content: center;
             user-select: none;
           }
           .timer {
-            font-family: ui-monospace, SFMono-Regular, monospace;
-            font-size: 38px;
+            font-size: 24px;
             font-weight: 700;
             line-height: 1;
             font-variant-numeric: tabular-nums;
           }
-          .summary {
-            font-size: 16px;
-            font-weight: 600;
-            margin-top: 8px;
-            font-variant-numeric: tabular-nums;
-          }
         `;
         pipWin.document.head.appendChild(style);
-
-        pipWin.document.body.innerHTML = `
-          <div id="pip-timer" class="timer"></div>
-          <div id="pip-habit-summary" class="summary"></div>
-        `;
+        pipWin.document.body.innerHTML = `<div id="pip-timer" class="timer"></div>`;
 
         pipWin.addEventListener('pagehide', () => {
           pipWinRef.current = null;
@@ -348,9 +308,6 @@ export function FloatingWidgetControl({ countdown, habits }: FloatingWidgetContr
           stopPip();
         };
         setPipActive(true);
-        setPipNotice(
-          'Bubble aktif. Tekan tombol Home di HP agar bubble H-berapa tetap mengambang di layar.'
-        );
       } else if (
         typeof video.webkitSupportsPresentationMode === 'function' &&
         video.webkitSupportsPresentationMode('picture-in-picture') &&
@@ -358,120 +315,87 @@ export function FloatingWidgetControl({ countdown, habits }: FloatingWidgetContr
       ) {
         video.webkitSetPresentationMode('picture-in-picture');
         setPipActive(true);
-        setPipNotice('Bubble iOS aktif. Tekan Home untuk melihat bubble tetap mengambang.');
       } else {
         throw new Error('Picture-in-Picture tidak tersedia.');
       }
     } catch {
       await stopPip();
-      setPipNotice(
-        'Browser/pratinjau ini membatasi mode Picture-in-Picture. Buka link Vercel langsung lewat Chrome di HP.'
-      );
+      setPipNotice('Mode mengambang tidak didukung oleh browser/pratinjau ini. Buka lewat Chrome di HP.');
     }
   };
-
-  const progressPct = totalCount > 0 ? completedCount / totalCount : 0;
-  const ringCircumference = 2 * Math.PI * 30;
-  const ringOffset = ringCircumference * (1 - progressPct);
 
   return (
     <section
       aria-label="Floating bubble smartphone"
-      className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-6"
+      className="bg-white rounded-3xl border border-slate-200/80 px-5 py-4 sm:px-6 sm:py-5"
     >
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h2 className="text-base sm:text-lg font-semibold tracking-tight text-slate-900">
-            Floating Bubble Smartphone
-          </h2>
-          <p className="mt-1 text-xs sm:text-sm text-slate-500">
-            Bubble hitung mundur yang tetap mengambang saat kamu menekan tombol Home di HP.
-          </p>
+      {/* Compact single-row control with On/Off switch */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          {/* Tiny live preview chip */}
+          <div
+            aria-hidden="true"
+            style={{ backgroundColor: theme.bg }}
+            className="px-2.5 py-1.5 rounded-xl text-white font-mono text-xs font-bold leading-none tabular-nums shrink-0 whitespace-nowrap"
+          >
+            {subText ? `${mainText} · ${subText}` : mainText}
+          </div>
+
+          <div className="min-w-0">
+            <h2 className="text-sm sm:text-base font-semibold tracking-tight text-slate-900 truncate">
+              Floating Bubble
+            </h2>
+            <p className="text-xs text-slate-500 truncate">
+              {pipActive ? 'Aktif · Tekan Home di HP' : 'Tampil mengambang di HP'}
+            </p>
+          </div>
         </div>
 
-        {/* Live miniature preview of the bubble */}
-        <div
-          aria-hidden="true"
-          style={{ backgroundColor: theme.bg }}
-          className="relative w-16 h-16 rounded-2xl shrink-0 flex flex-col items-center justify-center text-white shadow-sm overflow-hidden"
-        >
-          {config.showRing && (
-            <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 72 72">
-              <circle
-                cx="36"
-                cy="36"
-                r="30"
-                fill="none"
-                stroke={theme.ringTrack}
-                strokeWidth="2.5"
-              />
-              {progressPct > 0 && (
-                <circle
-                  cx="36"
-                  cy="36"
-                  r="30"
-                  fill="none"
-                  stroke="#FFFFFF"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeDasharray={ringCircumference}
-                  strokeDashoffset={ringOffset}
-                />
-              )}
-            </svg>
-          )}
-          <span className="font-mono text-sm font-bold leading-none tabular-nums">
-            {mainText}
-          </span>
-          {subText && (
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowCustomize((prev) => !prev)}
+            aria-expanded={showCustomize}
+            aria-label="Custom tampilan bubble"
+            className={`min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl border transition-colors ${
+              showCustomize
+                ? 'bg-slate-100 border-slate-300 text-slate-900'
+                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+          </button>
+
+          {/* Compact On/Off Switch */}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={pipActive}
+            aria-label={pipActive ? 'Matikan floating bubble' : 'Aktifkan floating bubble'}
+            onClick={handleTogglePip}
+            className="min-h-[44px] pl-1 flex items-center gap-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 rounded-xl"
+          >
             <span
-              style={{ color: theme.subtext }}
-              className="mt-1 text-[10px] font-semibold leading-none tabular-nums"
+              className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors duration-150 ${
+                pipActive ? 'bg-[#0D6E52]' : 'bg-slate-300'
+              }`}
             >
-              {subText}
+              <span
+                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-xs transition-transform duration-150 ${
+                  pipActive ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
             </span>
-          )}
+            <span className="text-xs font-semibold text-slate-700 w-6 text-left">
+              {pipActive ? 'On' : 'Off'}
+            </span>
+          </button>
         </div>
-      </div>
-
-      {/* Primary action + Customize toggle */}
-      <div className="mt-4 flex gap-2">
-        <button
-          type="button"
-          onClick={handleLaunchPip}
-          aria-pressed={pipActive}
-          className={`flex-1 min-h-[48px] px-4 rounded-xl text-sm font-medium inline-flex items-center justify-center gap-2 border transition-all active:scale-[0.98] ${
-            pipActive
-              ? 'bg-slate-900 border-slate-900 text-white hover:bg-slate-800'
-              : 'bg-[#0D6E52] border-[#0D6E52] text-white hover:bg-[#095540]'
-          }`}
-        >
-          <ExternalLink className="w-4 h-4 shrink-0" aria-hidden="true" />
-          <span className="whitespace-nowrap">
-            {pipActive ? 'Tutup Floating Bubble' : 'Aktifkan Floating Bubble'}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setShowCustomize((prev) => !prev)}
-          aria-expanded={showCustomize}
-          aria-label="Atur tampilan bubble"
-          className={`min-h-[48px] px-3.5 rounded-xl border text-sm font-medium inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 ${
-            showCustomize
-              ? 'bg-slate-100 border-slate-300 text-slate-900'
-              : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-          }`}
-        >
-          <SlidersHorizontal className="w-4 h-4 shrink-0" aria-hidden="true" />
-          <span>Custom</span>
-        </button>
       </div>
 
       {/* Custom Bubble Controls */}
       {showCustomize && (
         <div className="mt-4 pt-4 border-t border-slate-100 space-y-4">
-          {/* Color selection */}
           <div>
             <div className="text-xs font-medium text-slate-600 mb-2">Warna bubble</div>
             <div className="grid grid-cols-4 gap-2">
@@ -502,7 +426,6 @@ export function FloatingWidgetControl({ countdown, habits }: FloatingWidgetContr
             </div>
           </div>
 
-          {/* Content mode selection */}
           <div>
             <div className="text-xs font-medium text-slate-600 mb-2">Info yang tampil</div>
             <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl">
@@ -527,9 +450,8 @@ export function FloatingWidgetControl({ countdown, habits }: FloatingWidgetContr
             </div>
           </div>
 
-          {/* Progress ring toggle */}
           <div className="flex items-center justify-between gap-3">
-            <span className="text-xs font-medium text-slate-700">Cincin progres kebiasaan</span>
+            <span className="text-xs font-medium text-slate-700">Garis progres kebiasaan</span>
             <button
               type="button"
               role="switch"
@@ -547,25 +469,26 @@ export function FloatingWidgetControl({ countdown, habits }: FloatingWidgetContr
         </div>
       )}
 
-      <p className="mt-3 text-xs text-slate-500 leading-relaxed" role="status">
-        {pipNotice ??
-          'Buka lewat Chrome di HP, ketuk Aktifkan Floating Bubble, lalu tekan tombol Home.'}
-      </p>
+      {pipNotice && (
+        <p className="mt-2.5 text-xs text-slate-500 leading-relaxed" role="status">
+          {pipNotice}
+        </p>
+      )}
 
-      {/* Square 1:1 off-screen canvas & video for mobile PiP bubble */}
+      {/* Slim 2.3:1 off-screen canvas & video so Android PiP renders as compact as possible */}
       <canvas
         ref={canvasRef}
-        width={320}
-        height={320}
+        width={368}
+        height={160}
         aria-hidden="true"
-        className="fixed -left-[9999px] top-0 w-16 h-16 opacity-0 pointer-events-none"
+        className="fixed -left-[9999px] top-0 w-24 h-10 opacity-0 pointer-events-none"
       />
       <video
         ref={videoRef}
         muted
         playsInline
         aria-hidden="true"
-        className="fixed -left-[9999px] top-0 w-16 h-16 opacity-0 pointer-events-none"
+        className="fixed -left-[9999px] top-0 w-24 h-10 opacity-0 pointer-events-none"
       />
     </section>
   );
