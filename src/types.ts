@@ -20,10 +20,12 @@ export interface RamadanInfo {
   dateStr: string; // YYYY-MM-DD
 }
 
+export type BubbleStyle = 'illustration' | 'solid';
 export type BubbleColorId = 'emerald' | 'dark' | 'navy' | 'earth';
 export type BubbleContentMode = 'countdown-habit' | 'countdown-only' | 'countdown-clock';
 
 export interface BubbleConfig {
+  style: BubbleStyle;
   color: BubbleColorId;
   contentMode: BubbleContentMode;
   showRing: boolean;
